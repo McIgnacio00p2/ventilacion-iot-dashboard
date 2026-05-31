@@ -21,7 +21,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setInterval(() => {
         console.log("Actualizando datos desde ThingSpeak");
         cargarHistorialThingSpeak();
-    });
+    }, 15000);
 
     // Configurar botones de control remoto
     document.getElementById("btn-on").addEventListener("click", () => enviarComando("ON"));
@@ -85,25 +85,39 @@ function enviarComando(comando) {
 
 // === 4. PROCESAR ESTADO EN TIEMPO REAL (Llegado desde la Pico W) ===
 function procesarEstadoPico(payload) {
-    // Tu Pico W envía: "ON|AUTO|timestamp" o "OFF|MANUAL|timestamp"
+    // La Pico W ahora envía: "ON|AUTO|1|timestamp" o "OFF|MANUAL|0|timestamp"
     const datos = payload.split("|");
-    if (datos.length >= 2) {
+    if (datos.length >= 3) {
         const estadoVentilador = datos[0];
-        const modoSistema = datos[1];
+        const modoSistema      = datos[1];
+        const estadoPir        = datos[2]; // "1" = Detectado, "0" = CLEAR
 
-        // Actualizar tarjeta del Ventilador
+        // 1. Actualizar Tarjeta del Ventilador
         const txtVent = document.getElementById("txt-ventilador");
         txtVent.innerText = estadoVentilador;
         if (estadoVentilador === "ON") {
-            txtVent.className = "display-5 my-2 text-success fw-bold animate__animated animate__fadeIn";
+            txtVent.className = "display-5 my-2 text-success fw-bold";
         } else {
             txtVent.className = "display-5 my-2 text-danger fw-bold";
         }
 
-        // Actualizar Badge de Modo
+        // 2. Actualizar Badge de Modo
         const badgeModo = document.getElementById("badge-modo");
         badgeModo.innerText = `Modo: ${modoSistema}`;
         badgeModo.className = modoSistema === "AUTO" ? "badge bg-primary" : "badge bg-warning text-dark";
+
+        // 3. Sincronización del PIR vía MQTT!
+        const txtPir = document.getElementById("txt-pir");
+        const txtPirTiempo = document.getElementById("txt-pir-tiempo");
+        if (estadoPir === "1") {
+            txtPir.innerText = "DETECTADO";
+            txtPir.className = "display-5 my-2 text-danger fw-bold";
+            txtPirTiempo.innerText = "Movimiento detectado en tiempo real.";
+        } else {
+            txtPir.innerText = "CLEAR";
+            txtPir.className = "display-5 my-2 text-secondary fw-normal";
+            txtPirTiempo.innerText = "Área despejada.";
+        }
     }
 }
 
@@ -131,17 +145,6 @@ async function cargarHistorialThingSpeak() {
         // Actualizar indicadores superiores con el último registro disponible en la BD
         const ultimoRegistro = registros[0];
         document.getElementById("txt-cloud-sync").innerText = `Último envío: ${formatearFecha(ultimoRegistro.created_at)}`;
-        
-        const txtPir = document.getElementById("txt-pir");
-        if (ultimoRegistro.field2 === "1") {
-            txtPir.innerText = "DETECTADO";
-            txtPir.className = "display-5 my-2 text-danger fw-bold";
-            document.getElementById("txt-pir-tiempo").innerText = "Presencia registrada en el intervalo.";
-        } else {
-            txtPir.innerText = "CLEAR";
-            txtPir.className = "display-5 my-2 text-muted text-secondary";
-            document.getElementById("txt-pir-tiempo").innerText = "Sin novedades de movimiento.";
-        }
 
         // Limpiar tabla y rellenar con las filas
         tabla.innerHTML = "";

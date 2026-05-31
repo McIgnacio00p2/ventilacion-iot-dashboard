@@ -3,393 +3,111 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Sistema IoT de Ventilación Inteligente - Dashboard de Control Profesional">
+    <meta name="description" content="Sistema IoT de Ventilación Inteligente">
     <meta name="theme-color" content="#0f172a">
     
-    <title>Ventilación IoT | Dashboard Profesional</title>
+    <title>Ventilación IoT | Control Inteligente</title>
     
-    <!-- Favicon animado -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌬️</text></svg>">
-    
-    <!-- Fuentes Google -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    
-    <!-- Iconos Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <!-- AOS Animations -->
-    <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
-    
-    <!-- Chart.js -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    
-    <!-- Particles.js para fondo -->
-    <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
-    
-    <!-- MQTT.js -->
     <script src="https://unpkg.com/mqtt@5.3.0/dist/mqtt.min.js"></script>
-    
-    <!-- CSS -->
-    <link rel="stylesheet" href="css/animations.css">
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <!-- Particles Background -->
-    <div id="particles-js" class="particles-container"></div>
-
-    <!-- Loading Screen Premium -->
-    <div id="loading-screen" class="loading-screen">
-        <div class="loader-content">
-            <div class="loader-circle">
-                <svg class="loader-svg" viewBox="0 0 100 100">
-                    <circle class="loader-path" cx="50" cy="50" r="45" fill="none" stroke="url(#gradient)" stroke-width="4"/>
-                    <defs>
-                        <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
-                            <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
-                        </linearGradient>
-                    </defs>
-                </svg>
-                <div class="loader-icon">🌬️</div>
+    <!-- Navegación Superior -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <span class="brand-icon">🌬️</span>
+                <span class="brand-text">Ventilación IoT</span>
             </div>
-            <h2 class="loader-title">Ventilación IoT</h2>
-            <p class="loader-subtitle">Inicializando sistema...</p>
-            <div class="loader-progress">
-                <div class="loader-progress-bar"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Sidebar Navigation -->
-    <nav class="sidebar">
-        <div class="sidebar-brand">
-            <div class="brand-icon">
-                <i class="fas fa-wind"></i>
-            </div>
-            <div class="brand-text">
-                <h1>VentiSmart</h1>
-                <span>IoT Control</span>
-            </div>
-        </div>
-        
-        <ul class="sidebar-menu">
-            <li class="menu-item active" data-section="dashboard">
-                <i class="fas fa-th-large"></i>
-                <span>Dashboard</span>
-                <div class="menu-tooltip">Panel Principal</div>
-            </li>
-            <li class="menu-item" data-section="controls">
-                <i class="fas fa-sliders-h"></i>
-                <span>Control Manual</span>
-                <div class="menu-tooltip">Control del Ventilador</div>
-            </li>
-            <li class="menu-item" data-section="analytics">
-                <i class="fas fa-chart-line"></i>
-                <span>Analíticas</span>
-                <div class="menu-tooltip">Históricos y Datos</div>
-            </li>
-            <li class="menu-item" data-section="settings">
-                <i class="fas fa-cog"></i>
-                <span>Configuración</span>
-                <div class="menu-tooltip">Ajustes del Sistema</div>
-            </li>
-        </ul>
-
-        <div class="sidebar-footer">
-            <div class="connection-indicator">
-                <div class="indicator-dot" id="sidebar-status-dot"></div>
-                <span id="sidebar-status-text">Conectando</span>
+            <div class="nav-status">
+                <div class="connection-indicator" id="connectionIndicator">
+                    <span class="dot"></span>
+                    <span class="label">Conectado</span>
+                </div>
+                <div class="time" id="currentTime">00:00</div>
             </div>
         </div>
     </nav>
 
-    <!-- Main Content -->
+    <!-- Contenido Principal -->
     <main class="main-content">
-        <!-- Top Bar -->
-        <header class="top-bar">
-            <div class="top-bar-left">
-                <button class="menu-toggle" id="menu-toggle">
-                    <i class="fas fa-bars"></i>
-                </button>
-                <div class="search-box">
-                    <i class="fas fa-search"></i>
-                    <input type="text" placeholder="Buscar dispositivos...">
-                </div>
-            </div>
+        <div class="dashboard-container">
             
-            <div class="top-bar-right">
-                <div class="notification-bell">
-                    <i class="fas fa-bell"></i>
-                    <span class="notification-badge">3</span>
-                    <div class="notification-dropdown">
-                        <div class="notification-item">
-                            <i class="fas fa-check-circle text-success"></i>
-                            <div>
-                                <p>Ventilador activado</p>
-                                <span>Hace 2 minutos</span>
-                            </div>
-                        </div>
-                        <div class="notification-item">
-                            <i class="fas fa-clock text-warning"></i>
-                            <div>
-                                <p>Mantenimiento programado</p>
-                                <span>En 2 días</span>
-                            </div>
+            <!-- Sección Superior: Estado y Control -->
+            <div class="top-section">
+                
+                <!-- Tarjeta Principal: Ventilador -->
+                <div class="card ventilador-card">
+                    <div class="ventilador-display">
+                        <div class="fan-icon" id="fanIcon">🌀</div>
+                        <div class="ventilador-status">
+                            <h2 id="ventiladorLabel">APAGADO</h2>
+                            <span class="mode-badge" id="modeBadge">Modo Auto</span>
                         </div>
                     </div>
-                </div>
-                
-                <div class="user-profile">
-                    <img src="https://ui-avatars.com/api/?name=Admin&background=667eea&color=fff&size=40" alt="User">
-                    <div class="profile-info">
-                        <span>Admin</span>
-                        <small>Administrador</small>
+                    
+                    <!-- Botones de Control -->
+                    <div class="control-group">
+                        <button class="ctrl-btn power-btn" id="btnOn" onclick="controlManual('ON')">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.59-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z"/>
+                            </svg>
+                            Encender
+                        </button>
+                        <button class="ctrl-btn stop-btn" id="btnOff" onclick="controlManual('OFF')">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M6 6h12v12H6z"/>
+                            </svg>
+                            Apagar
+                        </button>
                     </div>
                 </div>
-                
-                <div class="datetime">
-                    <div class="time" id="current-time">00:00:00</div>
-                    <div class="date" id="current-date">Lunes, 1 Enero</div>
+
+                <!-- Tarjeta Secundaria: Sensor -->
+                <div class="card sensor-card">
+                    <div class="sensor-header">
+                        <h3>Sensor de Presencia</h3>
+                    </div>
+                    <div class="sensor-display">
+                        <div class="sensor-radar" id="sensorRadar">
+                            <div class="radar-ring"></div>
+                            <div class="radar-ring"></div>
+                            <div class="radar-ring"></div>
+                            <div class="radar-dot"></div>
+                        </div>
+                        <div class="sensor-info">
+                            <span id="sensorStatus">Sin presencia</span>
+                            <span class="last-detection" id="lastDetection">Última: --</span>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </header>
 
-        <!-- Dashboard Content -->
-        <div class="content-area">
-            <!-- Section: Dashboard -->
-            <section id="dashboard-section" class="section active">
-                <div class="section-header" data-aos="fade-down">
-                    <h2>Panel de Control</h2>
-                    <div class="breadcrumb">
-                        <span>Home</span>
-                        <i class="fas fa-chevron-right"></i>
-                        <span>Dashboard</span>
+            <!-- Sección Inferior: Gráfico Compacto -->
+            <div class="bottom-section">
+                <div class="card chart-card">
+                    <div class="chart-header">
+                        <h3>Actividad Reciente</h3>
+                        <div class="chart-legend">
+                            <span class="legend-item"><span class="legend-color vent-color"></span> Ventilador</span>
+                            <span class="legend-item"><span class="legend-color pir-color"></span> Sensor</span>
+                        </div>
+                    </div>
+                    <div class="chart-body">
+                        <canvas id="activityChart"></canvas>
                     </div>
                 </div>
-
-                <!-- Stats Cards Row -->
-                <div class="stats-row" data-aos="fade-up">
-                    <div class="stat-card glass-effect">
-                        <div class="stat-icon" style="--card-color: #667eea">
-                            <i class="fas fa-wind"></i>
-                        </div>
-                        <div class="stat-info">
-                            <h3>Estado Ventilador</h3>
-                            <div class="stat-value" id="stat-ventilador">APAGADO</div>
-                            <div class="stat-change positive">Modo Automático</div>
-                        </div>
-                        <div class="stat-chart">
-                            <canvas id="mini-chart-ventilador"></canvas>
-                        </div>
-                    </div>
-
-                    <div class="stat-card glass-effect">
-                        <div class="stat-icon" style="--card-color: #48bb78">
-                            <i class="fas fa-eye"></i>
-                        </div>
-                        <div class="stat-info">
-                            <h3>Sensor PIR</h3>
-                            <div class="stat-value" id="stat-pir">SIN PRESENCIA</div>
-                            <div class="stat-change" id="stat-pir-change">Sin detecciones</div>
-                        </div>
-                        <div class="stat-chart">
-                            <canvas id="mini-chart-pir"></canvas>
-                        </div>
-                    </div>
-
-                    <div class="stat-card glass-effect">
-                        <div class="stat-icon" style="--card-color: #ed8936">
-                            <i class="fas fa-clock"></i>
-                        </div>
-                        <div class="stat-info">
-                            <h3>Tiempo Activo</h3>
-                            <div class="stat-value" id="stat-tiempo">0 min</div>
-                            <div class="stat-change">Hoy</div>
-                        </div>
-                        <div class="stat-chart">
-                            <canvas id="mini-chart-tiempo"></canvas>
-                        </div>
-                    </div>
-
-                    <div class="stat-card glass-effect">
-                        <div class="stat-icon" style="--card-color: #9f7aea">
-                            <i class="fas fa-bolt"></i>
-                        </div>
-                        <div class="stat-info">
-                            <h3>Activaciones</h3>
-                            <div class="stat-value" id="stat-activaciones">0</div>
-                            <div class="stat-change positive">+0% vs ayer</div>
-                        </div>
-                        <div class="stat-chart">
-                            <canvas id="mini-chart-activaciones"></canvas>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Main Ventilador Display -->
-                <div class="ventilador-display glass-effect" data-aos="zoom-in">
-                    <div class="ventilador-3d-container">
-                        <div id="ventilador-3d" class="ventilador-3d off">
-                            <div class="ventilador-hub">
-                                <div class="hub-center"></div>
-                            </div>
-                            <div class="ventilador-blade blade-1"></div>
-                            <div class="ventilador-blade blade-2"></div>
-                            <div class="ventilador-blade blade-3"></div>
-                            <div class="ventilador-blade blade-4"></div>
-                        </div>
-                        <div class="ventilador-shadow"></div>
-                    </div>
-                    <div class="ventilador-details">
-                        <div class="detail-item">
-                            <span>Velocidad</span>
-                            <div class="speed-indicator">
-                                <div class="speed-bar" id="speed-bar"></div>
-                            </div>
-                        </div>
-                        <div class="detail-item">
-                            <span>Consumo</span>
-                            <strong id="consumo">0W</strong>
-                        </div>
-                        <div class="detail-item">
-                            <span>Temperatura</span>
-                            <strong id="temperatura">--°C</strong>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Charts Row -->
-                <div class="charts-row" data-aos="fade-up">
-                    <div class="chart-card glass-effect">
-                        <div class="chart-header">
-                            <h3><i class="fas fa-chart-area"></i> Historial de Actividad</h3>
-                            <div class="chart-legend">
-                                <span class="legend-item">
-                                    <span class="legend-color" style="background: #667eea;"></span>
-                                    Ventilador
-                                </span>
-                                <span class="legend-item">
-                                    <span class="legend-color" style="background: #48bb78;"></span>
-                                    Sensor PIR
-                                </span>
-                            </div>
-                            <div class="chart-controls">
-                                <button class="time-btn active" data-range="1h">1H</button>
-                                <button class="time-btn" data-range="6h">6H</button>
-                                <button class="time-btn" data-range="24h">24H</button>
-                                <button class="time-btn" data-range="7d">7D</button>
-                            </div>
-                        </div>
-                        <div class="chart-body">
-                            <canvas id="historyChart"></canvas>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Activity Timeline -->
-                <div class="activity-card glass-effect" data-aos="fade-left">
-                    <div class="activity-header">
-                        <h3><i class="fas fa-history"></i> Actividad Reciente</h3>
-                    </div>
-                    <div class="timeline" id="activity-timeline">
-                        <!-- Se llena dinámicamente -->
-                    </div>
-                </div>
-            </section>
-
-            <!-- Section: Controls -->
-            <section id="controls-section" class="section">
-                <div class="section-header" data-aos="fade-down">
-                    <h2>Control Manual</h2>
-                    <div class="breadcrumb">
-                        <span>Home</span>
-                        <i class="fas fa-chevron-right"></i>
-                        <span>Control</span>
-                    </div>
-                </div>
-
-                <div class="controls-grid">
-                    <div class="control-panel glass-effect" data-aos="fade-right">
-                        <h3>Control del Ventilador</h3>
-                        <div class="control-buttons-large">
-                            <button class="ctrl-btn ctrl-on" onclick="controlManual('ON')">
-                                <i class="fas fa-power-off"></i>
-                                <span>ENCENDER</span>
-                            </button>
-                            <button class="ctrl-btn ctrl-off" onclick="controlManual('OFF')">
-                                <i class="fas fa-stop-circle"></i>
-                                <span>APAGAR</span>
-                            </button>
-                            <button class="ctrl-btn ctrl-auto" onclick="controlManual('AUTO')">
-                                <i class="fas fa-robot"></i>
-                                <span>MODO AUTO</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="status-panel glass-effect" data-aos="fade-left">
-                        <h3>Estado del Sistema</h3>
-                        <div class="status-grid">
-                            <div class="status-item">
-                                <i class="fas fa-wifi"></i>
-                                <div>
-                                    <span>WiFi</span>
-                                    <strong class="text-success">Conectado</strong>
-                                </div>
-                            </div>
-                            <div class="status-item">
-                                <i class="fas fa-network-wired"></i>
-                                <div>
-                                    <span>MQTT</span>
-                                    <strong id="mqtt-status-text">Conectando...</strong>
-                                </div>
-                            </div>
-                            <div class="status-item">
-                                <i class="fas fa-microchip"></i>
-                                <div>
-                                    <span>Pico W</span>
-                                    <strong class="text-success">Online</strong>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Section: Analytics -->
-            <section id="analytics-section" class="section">
-                <div class="section-header" data-aos="fade-down">
-                    <h2>Analíticas Avanzadas</h2>
-                    <div class="breadcrumb">
-                        <span>Home</span>
-                        <i class="fas fa-chevron-right"></i>
-                        <span>Analíticas</span>
-                    </div>
-                </div>
-
-                <div class="analytics-grid">
-                    <div class="analytics-card glass-effect" data-aos="fade-up">
-                        <h3>Uso por Hora</h3>
-                        <canvas id="hourlyChart"></canvas>
-                    </div>
-                    <div class="analytics-card glass-effect" data-aos="fade-up" data-aos-delay="100">
-                        <h3>Eficiencia Energética</h3>
-                        <canvas id="efficiencyChart"></canvas>
-                    </div>
-                    <div class="analytics-card glass-effect" data-aos="fade-up" data-aos-delay="200">
-                        <h3>Patrones de Movimiento</h3>
-                        <canvas id="movementChart"></canvas>
-                    </div>
-                </div>
-            </section>
+            </div>
         </div>
     </main>
 
-    <!-- Scripts -->
-    <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+    <!-- Toast de Notificación -->
+    <div class="toast" id="toast"></div>
+
     <script src="js/mqtt-client.js"></script>
-    <script src="js/charts.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

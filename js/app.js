@@ -19,9 +19,9 @@ document.addEventListener("DOMContentLoaded", () => {
     cargarHistorialThingSpeak();
 
     setInterval(() => {
-        console.log("🔄 Actualizando datos desde ThingSpeak de forma automática...");
+        console.log("Actualizando datos desde ThingSpeak");
         cargarHistorialThingSpeak();
-    }, 15000);
+    });
 
     // Configurar botones de control remoto
     document.getElementById("btn-on").addEventListener("click", () => enviarComando("ON"));

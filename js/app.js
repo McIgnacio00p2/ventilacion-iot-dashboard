@@ -1,19 +1,19 @@
 // === CONFIGURACIÓN DEL SISTEMA ===
-const THINGSPEAK_CHANNEL_ID = "3397586"; // ⚠️ REMPLAZA POR TU NÚMERO DE CANAL
+const THINGSPEAK_CHANNEL_ID = "3397586";
 const THINGSPEAK_READ_KEY   = "A0VIWKX95SC6X6XQ";
 
 const MQTT_BROKER   = "broker.emqx.io";
-const MQTT_PORT     = 8084; // Puerto WSS para navegadores (Seguro)
+const MQTT_PORT     = 8084;
 const MQTT_PATH     = "/mqtt";
 const MQTT_CLIENT_ID = "web_client_" + Math.random().toString(16).substr(2, 8);
 
-// Tópicos (Deben ser exactamente los mismos de tu config.py en la Pico W)
+// Tópicos
 const MQTT_TOPIC_CONTROL = "antartik/mcignacio00p2/ventilador/control";
 const MQTT_TOPIC_STATUS  = "antartik/mcignacio00p2/ventilador/status";
 
 let mqttClient;
 
-// === 1. INICIALIZACIÓN AL CARGAR LA PÁGINA ===
+//1. INICIALIZACIÓN AL CARGAR LA PÁGINA
 document.addEventListener("DOMContentLoaded", () => {
     conectarMQTT();
     cargarHistorialThingSpeak();
@@ -32,7 +32,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("btn-refresh-db").addEventListener("click", cargarHistorialThingSpeak);
 });
 
-// === 2. LÓGICA DE CONEXIÓN MQTT (WEB Sockets) ===
+//2. LÓGICA DE CONEXIÓN MQTT (WEB Sockets)
 function conectarMQTT() {
     const badge = document.getElementById("mqtt-status-badge");
     
@@ -71,7 +71,7 @@ function conectarMQTT() {
     mqttClient.connect(opciones);
 }
 
-// === 3. ENVIAR COMANDOS A LA RASPBERRY PI PICO ===
+//3. ENVIAR COMANDOS A LA RASPBERRY PI PICO
 function enviarComando(comando) {
     if (!mqttClient || !mqttClient.isConnected()) {
         alert("No hay conexión con el servidor MQTT en este momento.");
@@ -83,14 +83,13 @@ function enviarComando(comando) {
     console.log(`📤 Comando enviado a la Pico W: ${comando}`);
 }
 
-// === 4. PROCESAR ESTADO EN TIEMPO REAL (Llegado desde la Pico W) ===
+//4. PROCESAR ESTADO EN TIEMPO REAL
 function procesarEstadoPico(payload) {
-    // La Pico W ahora envía: "ON|AUTO|1|timestamp" o "OFF|MANUAL|0|timestamp"
     const datos = payload.split("|");
     if (datos.length >= 3) {
         const estadoVentilador = datos[0];
         const modoSistema      = datos[1];
-        const estadoPir        = datos[2]; // "1" = Detectado, "0" = CLEAR
+        const estadoPir        = datos[2];
 
         // 1. Actualizar Tarjeta del Ventilador
         const txtVent = document.getElementById("txt-ventilador");
@@ -121,7 +120,7 @@ function procesarEstadoPico(payload) {
     }
 }
 
-// === 5. JALAR HISTORIAL DESDE LA BASE DE DATOS (ThingSpeak) ===
+//5. JALAR HISTORIAL DESDE LA BASE DE DATOS
 async function cargarHistorialThingSpeak() {
     const tabla = document.getElementById("tabla-historial");
     
@@ -142,7 +141,6 @@ async function cargarHistorialThingSpeak() {
             return;
         }
 
-        // Actualizar indicadores superiores con el último registro disponible en la BD
         const ultimoRegistro = registros[0];
         document.getElementById("txt-cloud-sync").innerText = `Último envío: ${formatearFecha(ultimoRegistro.created_at)}`;
 
@@ -176,7 +174,6 @@ async function cargarHistorialThingSpeak() {
     }
 }
 
-// Función auxiliar para dejar la fecha legible
 function formatearFecha(fechaISO) {
     const fecha = new Date(fechaISO);
     return fecha.toLocaleString("es-MX", { timeZone: "America/Mexico_City" });

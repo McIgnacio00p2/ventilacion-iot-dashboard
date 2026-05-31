@@ -18,6 +18,11 @@ document.addEventListener("DOMContentLoaded", () => {
     conectarMQTT();
     cargarHistorialThingSpeak();
 
+    setInterval(() => {
+        console.log("🔄 Actualizando datos desde ThingSpeak de forma automática...");
+        cargarHistorialThingSpeak();
+    }, 15000);
+
     // Configurar botones de control remoto
     document.getElementById("btn-on").addEventListener("click", () => enviarComando("ON"));
     document.getElementById("btn-off").addEventListener("click", () => enviarComando("OFF"));

@@ -7,42 +7,64 @@ const MQTT_PORT     = 8084;
 const MQTT_PATH     = "/mqtt";
 const MQTT_CLIENT_ID = "web_client_" + Math.random().toString(16).substr(2, 8);
 
-// Tópicos
 const MQTT_TOPIC_CONTROL = "antartik/mcignacio00p2/ventilador/control";
 const MQTT_TOPIC_STATUS  = "antartik/mcignacio00p2/ventilador/status";
 
 let mqttClient;
 
-//1. INICIALIZACIÓN AL CARGAR LA PÁGINA
+// 1. INICIALIZACIÓN AL CARGAR LA PÁGINA
 document.addEventListener("DOMContentLoaded", () => {
     conectarMQTT();
     cargarHistorialThingSpeak();
 
+    // Escuchar cambios en el selector de filtros para mostrar/ocultar fechas
+    const selectFiltro = document.getElementById("select-filtro");
+    const contenedorFechas = document.getElementById("contenedor-fechas");
+
+    selectFiltro.addEventListener("change", () => {
+        if (selectFiltro.value === "rango") {
+            contenedorFechas.classList.remove("d-none");
+            // Colocar por defecto la fecha de hoy en los inputs
+            const hoyStr = new Date().toISOString().split('T')[0];
+            document.getElementById("fecha-inicio").value = hoyStr;
+            document.getElementById("fecha-fin").value = hoyStr;
+        } else {
+            contenedorFechas.classList.add("d-none");
+            cargarHistorialThingSpeak(); // Cargar Hoy o Ayer inmediatamente
+        }
+    });
+
+    // Botón para aplicar filtro de rango de fechas personalizado
+    document.getElementById("btn-aplicar-filtro").addEventListener("click", cargarHistorialThingSpeak);
+
+    // Automatización: Refrescar de forma segura cada 15 segundos
     setInterval(() => {
-        console.log("Actualizando datos desde ThingSpeak");
-        cargarHistorialThingSpeak();
+        // Solo refrescar automáticamente en segundo plano si está seleccionado "Hoy"
+        if (selectFiltro.value === "hoy") {
+            console.log("Actualizando automáticamente datos de Hoy desde ThingSpeak...");
+            cargarHistorialThingSpeak();
+        }
     }, 15000);
 
-    // Configurar botones de control remoto
+    // Configurar botones de control remoto MQTT
     document.getElementById("btn-on").addEventListener("click", () => enviarComando("ON"));
     document.getElementById("btn-off").addEventListener("click", () => enviarComando("OFF"));
     document.getElementById("btn-auto").addEventListener("click", () => enviarComando("AUTO"));
     
-    // Botón de actualización manual del historial
+    // Botón manual superior de actualizar tabla
     document.getElementById("btn-refresh-db").addEventListener("click", cargarHistorialThingSpeak);
 });
 
-//2. LÓGICA DE CONEXIÓN MQTT (WEB Sockets)
+// 2. LÓGICA DE CONEXIÓN MQTT (WEB Sockets)
 function conectarMQTT() {
     const badge = document.getElementById("mqtt-status-badge");
-    
     mqttClient = new Paho.MQTT.Client(MQTT_BROKER, Number(MQTT_PORT), MQTT_PATH, MQTT_CLIENT_ID);
 
     mqttClient.onConnectionLost = (responseObject) => {
         console.log("Conexión MQTT perdida:", responseObject.errorMessage);
         badge.className = "badge bg-danger";
         badge.innerText = "Desconectado";
-        setTimeout(conectarMQTT, 5000); // Intentar reconectar en 5s
+        setTimeout(conectarMQTT, 5000);
     };
 
     mqttClient.onMessageArrived = (message) => {
@@ -53,7 +75,7 @@ function conectarMQTT() {
     };
 
     const opciones = {
-        useSSL: true, // Obligatorio para Vercel (HTTPS)
+        useSSL: true,
         onSuccess: () => {
             console.log("✅ Conectado exitosamente al Broker MQTT");
             badge.className = "badge bg-success";
@@ -67,11 +89,10 @@ function conectarMQTT() {
             setTimeout(conectarMQTT, 10000);
         }
     };
-
     mqttClient.connect(opciones);
 }
 
-//3. ENVIAR COMANDOS A LA RASPBERRY PI PICO
+// 3. ENVIAR COMANDOS A LA PICO W
 function enviarComando(comando) {
     if (!mqttClient || !mqttClient.isConnected()) {
         alert("No hay conexión con el servidor MQTT en este momento.");
@@ -83,7 +104,7 @@ function enviarComando(comando) {
     console.log(`📤 Comando enviado a la Pico W: ${comando}`);
 }
 
-//4. PROCESAR ESTADO EN TIEMPO REAL
+// 4. PROCESAR ESTADO EN TIEMPO REAL
 function procesarEstadoPico(payload) {
     const datos = payload.split("|");
     if (datos.length >= 3) {
@@ -91,7 +112,6 @@ function procesarEstadoPico(payload) {
         const modoSistema      = datos[1];
         const estadoPir        = datos[2];
 
-        // 1. Actualizar Tarjeta del Ventilador
         const txtVent = document.getElementById("txt-ventilador");
         txtVent.innerText = estadoVentilador;
         if (estadoVentilador === "ON") {
@@ -100,12 +120,10 @@ function procesarEstadoPico(payload) {
             txtVent.className = "display-5 my-2 text-danger fw-bold";
         }
 
-        // 2. Actualizar Badge de Modo
         const badgeModo = document.getElementById("badge-modo");
         badgeModo.innerText = `Modo: ${modoSistema}`;
         badgeModo.className = modoSistema === "AUTO" ? "badge bg-primary" : "badge bg-warning text-dark";
 
-        // 3. Sincronización del PIR vía MQTT!
         const txtPir = document.getElementById("txt-pir");
         const txtPirTiempo = document.getElementById("txt-pir-tiempo");
         if (estadoPir === "1") {
@@ -120,31 +138,58 @@ function procesarEstadoPico(payload) {
     }
 }
 
-//5. JALAR HISTORIAL DESDE LA BASE DE DATOS
+// 5. JALAR HISTORIAL DESDE LA BASE DE DATOS CON FILTROS DINÁMICOS
 async function cargarHistorialThingSpeak() {
     const tabla = document.getElementById("tabla-historial");
+    const filtro = document.getElementById("select-filtro").value;
     
-    if (THINGSPEAK_CHANNEL_ID === "TU_CHANNEL_ID_AQUÍ") {
-        tabla.innerHTML = `<tr><td colspan="3" class="text-center text-warning">⚠️ Configura el Channel ID en js/app.js</td></tr>`;
-        return;
+    // Base de la URL de lectura
+    let url = `https://api.thingspeak.com/channels/${THINGSPEAK_CHANNEL_ID}/feeds.json?api_key=${THINGSPEAK_READ_KEY}`;
+
+    // Funciones internas auxiliares para formatear la fecha estilo ThingSpeak (YYYY-MM-DD)
+    const pad = (num) => String(num).padStart(2, '0');
+    const formatearAFechaString = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    // Evaluar qué filtros añadir a la query HTTP
+    if (filtro === "hoy") {
+        const hoy = new Date();
+        const fechaStr = formatearAFechaString(hoy);
+        url += `&start=${fechaStr}%2000:00:00&end=${fechaStr}%2023:59:59&results=8000`;
+    } 
+    else if (filtro === "ayer") {
+        const ayer = new Date();
+        ayer.setDate(ayer.getDate() - 1);
+        const fechaStr = formatearAFechaString(ayer);
+        url += `&start=${fechaStr}%2000:00:00&end=${fechaStr}%2023:59:59&results=8000`;
+    } 
+    else if (filtro === "rango") {
+        const fechaInicio = document.getElementById("fecha-inicio").value;
+        const fechaFin = document.getElementById("fecha-fin").value;
+        
+        if (!fechaInicio || !fechaFin) {
+            alert("Por favor, selecciona una fecha de inicio y una fecha de fin.");
+            return;
+        }
+        url += `&start=${fechaInicio}%2000:00:00&end=${fechaFin}%2023:59:59&results=8000`;
     }
 
-    const url = `https://api.thingspeak.com/channels/${THINGSPEAK_CHANNEL_ID}/feeds.json?api_key=${THINGSPEAK_READ_KEY}&results=100`;
-
     try {
+        tabla.innerHTML = `<tr><td colspan="3" class="text-center text-muted py-4">Buscando registros en la nube...</td></tr>`;
+        
         const respuesta = await fetch(url);
         const datos = await respuesta.json();
-        const registros = datos.feeds.reverse(); // Mostrar los más recientes primero
+        const registros = datos.feeds.reverse(); // Mostrar los más nuevos arriba
 
         if (registros.length === 0) {
-            tabla.innerHTML = `<tr><td colspan="3" class="text-center text-muted py-3">No hay registros aún.</td></tr>`;
+            tabla.innerHTML = `<tr><td colspan="3" class="text-center text-warning py-4"><i class="bi bi-exclamation-triangle me-2"></i>No se encontraron datos guardados en el período seleccionado.</td></tr>`;
             return;
         }
 
+        // Mostrar la fecha del registro más reciente del canal en el indicador superior
         const ultimoRegistro = registros[0];
         document.getElementById("txt-cloud-sync").innerText = `Último envío: ${formatearFecha(ultimoRegistro.created_at)}`;
 
-        // Limpiar tabla y rellenar con las filas
+        // Limpiar la tabla y renderizar todas las filas devueltas
         tabla.innerHTML = "";
         registros.forEach(reg => {
             const fila = document.createElement("tr");
@@ -170,7 +215,7 @@ async function cargarHistorialThingSpeak() {
 
     } catch (error) {
         console.error("Error consultando ThingSpeak:", error);
-        tabla.innerHTML = `<tr><td colspan="3" class="text-center text-danger">❌ Error al conectar con ThingSpeak API</td></tr>`;
+        tabla.innerHTML = `<tr><td colspan="3" class="text-center text-danger py-4">❌ Error al conectar con la API de ThingSpeak</td></tr>`;
     }
 }
 

@@ -129,7 +129,7 @@ async function cargarHistorialThingSpeak() {
         return;
     }
 
-    const url = `https://api.thingspeak.com/channels/${THINGSPEAK_CHANNEL_ID}/feeds.json?api_key=${THINGSPEAK_READ_KEY}&results=10`;
+    const url = `https://api.thingspeak.com/channels/${THINGSPEAK_CHANNEL_ID}/feeds.json?api_key=${THINGSPEAK_READ_KEY}&results=100`;
 
     try {
         const respuesta = await fetch(url);

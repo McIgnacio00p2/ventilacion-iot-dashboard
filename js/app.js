@@ -7,6 +7,7 @@ const MQTT_PORT     = 8084;
 const MQTT_PATH     = "/mqtt";
 const MQTT_CLIENT_ID = "web_client_" + Math.random().toString(16).substr(2, 8);
 
+// Tópicos
 const MQTT_TOPIC_CONTROL = "antartik/mcignacio00p2/ventilador/control";
 const MQTT_TOPIC_STATUS  = "antartik/mcignacio00p2/ventilador/status";
 
@@ -17,47 +18,50 @@ document.addEventListener("DOMContentLoaded", () => {
     conectarMQTT();
     cargarHistorialThingSpeak();
 
-    // Escuchar cambios en el selector de filtros para mostrar/ocultar fechas
     const selectFiltro = document.getElementById("select-filtro");
     const contenedorFechas = document.getElementById("contenedor-fechas");
 
     selectFiltro.addEventListener("change", () => {
         if (selectFiltro.value === "rango") {
             contenedorFechas.classList.remove("d-none");
-            // Colocar por defecto la fecha de hoy en los inputs
-            const hoyStr = new Date().toISOString().split('T')[0];
-            document.getElementById("fecha-inicio").value = hoyStr;
-            document.getElementById("fecha-fin").value = hoyStr;
+            
+            // CORRECCIÓN: Obtener la fecha de hoy en formato LOCAL (YYYY-MM-DD), no en UTC
+            const ahora = new Date();
+            const y = ahora.getFullYear();
+            const m = String(ahora.getMonth() + 1).padStart(2, '0');
+            const d = String(ahora.getDate()).padStart(2, '0');
+            const hoyLocalStr = `${y}-${m}-${d}`;
+            
+            document.getElementById("fecha-inicio").value = hoyLocalStr;
+            document.getElementById("fecha-fin").value = hoyLocalStr;
         } else {
             contenedorFechas.classList.add("d-none");
-            cargarHistorialThingSpeak(); // Cargar Hoy o Ayer inmediatamente
+            cargarHistorialThingSpeak(); 
         }
     });
 
-    // Botón para aplicar filtro de rango de fechas personalizado
     document.getElementById("btn-aplicar-filtro").addEventListener("click", cargarHistorialThingSpeak);
 
-    // Automatización: Refrescar de forma segura cada 15 segundos
+    // Automatización: Refrescar cada 15 segundos sólo si se está viendo "Hoy"
     setInterval(() => {
-        // Solo refrescar automáticamente en segundo plano si está seleccionado "Hoy"
         if (selectFiltro.value === "hoy") {
-            console.log("Actualizando automáticamente datos de Hoy desde ThingSpeak...");
+            console.log("Actualizando datos automáticos de hoy...");
             cargarHistorialThingSpeak();
         }
     }, 15000);
 
-    // Configurar botones de control remoto MQTT
+    // Configurar botones de control remoto
     document.getElementById("btn-on").addEventListener("click", () => enviarComando("ON"));
     document.getElementById("btn-off").addEventListener("click", () => enviarComando("OFF"));
     document.getElementById("btn-auto").addEventListener("click", () => enviarComando("AUTO"));
     
-    // Botón manual superior de actualizar tabla
     document.getElementById("btn-refresh-db").addEventListener("click", cargarHistorialThingSpeak);
 });
 
-// 2. LÓGICA DE CONEXIÓN MQTT (WEB Sockets)
+// 2. LÓGICA DE CONEXIÓN MQTT
 function conectarMQTT() {
     const badge = document.getElementById("mqtt-status-badge");
+    
     mqttClient = new Paho.MQTT.Client(MQTT_BROKER, Number(MQTT_PORT), MQTT_PATH, MQTT_CLIENT_ID);
 
     mqttClient.onConnectionLost = (responseObject) => {
@@ -89,19 +93,19 @@ function conectarMQTT() {
             setTimeout(conectarMQTT, 10000);
         }
     };
+
     mqttClient.connect(opciones);
 }
 
-// 3. ENVIAR COMANDOS A LA PICO W
-function enviarComando(comando) {
+// 3. ENVIAR COMANDOS
+function enviarComando(command) {
     if (!mqttClient || !mqttClient.isConnected()) {
         alert("No hay conexión con el servidor MQTT en este momento.");
         return;
     }
-    const mensaje = new Paho.MQTT.Message(comando);
+    const mensaje = new Paho.MQTT.Message(command);
     mensaje.destinationName = MQTT_TOPIC_CONTROL;
     mqttClient.send(mensaje);
-    console.log(`📤 Comando enviado a la Pico W: ${comando}`);
 }
 
 // 4. PROCESAR ESTADO EN TIEMPO REAL
@@ -114,11 +118,7 @@ function procesarEstadoPico(payload) {
 
         const txtVent = document.getElementById("txt-ventilador");
         txtVent.innerText = estadoVentilador;
-        if (estadoVentilador === "ON") {
-            txtVent.className = "display-5 my-2 text-success fw-bold";
-        } else {
-            txtVent.className = "display-5 my-2 text-danger fw-bold";
-        }
+        txtVent.className = estadoVentilador === "ON" ? "display-5 my-2 text-success fw-bold" : "display-5 my-2 text-danger fw-bold";
 
         const badgeModo = document.getElementById("badge-modo");
         badgeModo.innerText = `Modo: ${modoSistema}`;
@@ -138,58 +138,74 @@ function procesarEstadoPico(payload) {
     }
 }
 
-// 5. JALAR HISTORIAL DESDE LA BASE DE DATOS CON FILTROS DINÁMICOS
+// 5. JALAR HISTORIAL CORREGIDO (Manejo preciso de Zonas Horarias)
 async function cargarHistorialThingSpeak() {
     const tabla = document.getElementById("tabla-historial");
     const filtro = document.getElementById("select-filtro").value;
     
-    // Base de la URL de lectura
     let url = `https://api.thingspeak.com/channels/${THINGSPEAK_CHANNEL_ID}/feeds.json?api_key=${THINGSPEAK_READ_KEY}`;
 
-    // Funciones internas auxiliares para formatear la fecha estilo ThingSpeak (YYYY-MM-DD)
-    const pad = (num) => String(num).padStart(2, '0');
-    const formatearAFechaString = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    // Helper para formatear cualquier objeto Date a la cadena UTC exacta que ThingSpeak requiere
+    const dateToUTCString = (dateObj) => {
+        const y = dateObj.getUTCFullYear();
+        const m = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+        const d = String(dateObj.getUTCDate()).padStart(2, '0');
+        const hh = String(dateObj.getUTCHours()).padStart(2, '0');
+        const mm = String(dateObj.getUTCMinutes()).padStart(2, '0');
+        const ss = String(dateObj.getUTCSeconds()).padStart(2, '0');
+        return `${y}-${m}-${d}%20${hh}:${mm}:${ss}`;
+    };
 
-    // Evaluar qué filtros añadir a la query HTTP
     if (filtro === "hoy") {
-        const hoy = new Date();
-        const fechaStr = formatearAFechaString(hoy);
-        url += `&start=${fechaStr}%2000:00:00&end=${fechaStr}%2023:59:59&results=8000`;
+        const start = new Date();
+        start.setHours(0, 0, 0, 0); // Desde las 00:00:00 locales de hoy
+        const end = new Date();
+        end.setHours(23, 59, 59, 999); // Hasta las 23:59:59 locales de hoy
+        
+        url += `&start=${dateToUTCString(start)}&end=${dateToUTCString(end)}&results=8000`;
     } 
     else if (filtro === "ayer") {
-        const ayer = new Date();
-        ayer.setDate(ayer.getDate() - 1);
-        const fechaStr = formatearAFechaString(ayer);
-        url += `&start=${fechaStr}%2000:00:00&end=${fechaStr}%2023:59:59&results=8000`;
+        const start = new Date();
+        start.setDate(start.getDate() - 1);
+        start.setHours(0, 0, 0, 0); // 00:00:00 local de ayer
+        
+        const end = new Date();
+        end.setDate(end.getDate() - 1);
+        end.setHours(23, 59, 59, 999); // 23:59:59 local de ayer
+        
+        url += `&start=${dateToUTCString(start)}&end=${dateToUTCString(end)}&results=8000`;
     } 
     else if (filtro === "rango") {
-        const fechaInicio = document.getElementById("fecha-inicio").value;
-        const fechaFin = document.getElementById("fecha-fin").value;
+        const fechaInicioVal = document.getElementById("fecha-inicio").value;
+        const fechaFinVal = document.getElementById("fecha-fin").value;
         
-        if (!fechaInicio || !fechaFin) {
-            alert("Por favor, selecciona una fecha de inicio y una fecha de fin.");
+        if (!fechaInicioVal || !fechaFinVal) {
+            alert("Por favor, selecciona un rango válido.");
             return;
         }
-        url += `&start=${fechaInicio}%2000:00:00&end=${fechaFin}%2023:59:59&results=8000`;
+
+        const pInicio = fechaInicioVal.split("-");
+        const start = new Date(pInicio[0], pInicio[1] - 1, pInicio[2], 0, 0, 0);
+
+        const pFin = fechaFinVal.split("-");
+        const end = new Date(pFin[0], pFin[1] - 1, pFin[2], 23, 59, 59);
+
+        url += `&start=${dateToUTCString(start)}&end=${dateToUTCString(end)}&results=8000`;
     }
 
     try {
-        tabla.innerHTML = `<tr><td colspan="3" class="text-center text-muted py-4">Buscando registros en la nube...</td></tr>`;
-        
         const respuesta = await fetch(url);
         const datos = await respuesta.json();
-        const registros = datos.feeds.reverse(); // Mostrar los más nuevos arriba
+        const registros = datos.feeds.reverse();
 
         if (registros.length === 0) {
-            tabla.innerHTML = `<tr><td colspan="3" class="text-center text-warning py-4"><i class="bi bi-exclamation-triangle me-2"></i>No se encontraron datos guardados en el período seleccionado.</td></tr>`;
+            tabla.innerHTML = `<tr><td colspan="3" class="text-center text-warning py-4"><i class="bi bi-exclamation-triangle me-2"></i>No hay registros en el lapso seleccionado.</td></tr>`;
             return;
         }
 
-        // Mostrar la fecha del registro más reciente del canal en el indicador superior
         const ultimoRegistro = registros[0];
         document.getElementById("txt-cloud-sync").innerText = `Último envío: ${formatearFecha(ultimoRegistro.created_at)}`;
 
-        // Limpiar la tabla y renderizar todas las filas devueltas
         tabla.innerHTML = "";
         registros.forEach(reg => {
             const fila = document.createElement("tr");
@@ -215,7 +231,7 @@ async function cargarHistorialThingSpeak() {
 
     } catch (error) {
         console.error("Error consultando ThingSpeak:", error);
-        tabla.innerHTML = `<tr><td colspan="3" class="text-center text-danger py-4">❌ Error al conectar con la API de ThingSpeak</td></tr>`;
+        tabla.innerHTML = `<tr><td colspan="3" class="text-center text-danger py-4">❌ Error al conectar con ThingSpeak API</td></tr>`;
     }
 }
 

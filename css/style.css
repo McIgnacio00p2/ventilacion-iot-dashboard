@@ -1,0 +1,85 @@
+/* css/style.css - Estilos personalizados Antartik Air */
+
+:root {
+    --antartik-navy: #022B54;   /* El azul profundo de las montañas y letras del logo */
+    --antartik-cyan: #3AC0D6;   /* El cian brillante del flujo de aire */
+    --antartik-ice: #E6F7FA;    /* Azul claro cristalino para fondos suaves y detalles */
+    --antartik-bg: #F4F7FA;     /* Gris azulado ultra claro para el fondo general */
+    --antartik-dark: #1E293B;   /* Gris oscuro para textos legibles */
+}
+
+body {
+    background-color: var(--antartik-bg);
+    color: var(--antartik-dark);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+/* Barra de Navegación Premium */
+.navbar-antartik {
+    background: linear-gradient(135deg, var(--antartik-navy) 0%, #011832 100%);
+    border-bottom: 3px solid var(--antartik-cyan);
+}
+
+.navbar-brand img {
+    filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.15));
+}
+
+/* Tarjetas Estilizadas */
+.card-antartik {
+    border: none !important;
+    border-radius: 12px;
+    background-color: #ffffff;
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.card-antartik:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 20px rgba(2, 43, 84, 0.08) !important;
+}
+
+.card-header-antartik {
+    background-color: #ffffff !important;
+    border-bottom: 1px solid var(--antartik-ice) !important;
+    color: var(--antartik-navy);
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+/* Badges personalizados con los colores de la marca */
+.badge-auto {
+    background-color: var(--antartik-ice);
+    color: var(--antartik-navy);
+    border: 1px solid rgba(58, 192, 214, 0.3);
+}
+
+.badge-manual {
+    background-color: #FEF3C7;
+    color: #92400E;
+    border: 1px solid #FDE68A;
+}
+
+/* Personalización de inputs y controles */
+.form-select, .form-control {
+    border-color: #D1D5DB;
+    border-radius: 8px;
+}
+
+.form-select:focus, .form-control:focus {
+    border-color: var(--antartik-cyan);
+    box-shadow: 0 0 0 0.25rem rgba(58, 192, 214, 0.25);
+}
+
+/* Tabla de Historial con scroll estilizado */
+.table-responsive::-webkit-scrollbar {
+    width: 6px;
+}
+.table-responsive::-webkit-scrollbar-track {
+    background: var(--antartik-bg);
+}
+.table-responsive::-webkit-scrollbar-thumb {
+    background: #CBD5E1;
+    border-radius: 4px;
+}
+.table-responsive::-webkit-scrollbar-thumb:hover {
+    background: var(--antartik-cyan);
+}

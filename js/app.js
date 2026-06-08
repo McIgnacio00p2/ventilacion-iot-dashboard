@@ -62,7 +62,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // Evento de inicio de sesión manual (Firebase Auth)
+    // Evento de inicio de sesión
     document.getElementById("form-login").addEventListener("submit", (e) => {
         e.preventDefault();
         const email = document.getElementById("login-email").value;
@@ -109,7 +109,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     document.getElementById("btn-aplicar-filtro").addEventListener("click", cargarHistorialThingSpeak);
 
-    // Automatización de refresco de telemetría cada 15 segundos
+    // Automatización de refresco de telemetria cada 15 segundos
     setInterval(() => {
         if (selectFiltro.value === "hoy" && auth.currentUser) {
             cargarHistorialThingSpeak();
@@ -189,7 +189,7 @@ function enviarComando(command) {
     }
 }
 
-// --- OPERACIÓN: READ (Escucha activa / Stream en tiempo real) ---
+// --- OPERACIÓN: READ ---
 function escucharAccionesFirestore() {
     const tablaCloud = document.getElementById("tabla-acciones-cloud");
     if (!tablaCloud) return;

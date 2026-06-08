@@ -194,13 +194,13 @@ function escucharAccionesFirestore() {
     const tablaCloud = document.getElementById("tabla-acciones-cloud");
     if (!tablaCloud) return;
 
-    // Conexión por Websocket nativo a Firestore ordenando de forma descendente
     db.collection("historial_acciones")
         .orderBy("fecha", "desc")
-        .limit(10) // Restricción para traer solo las últimas 10 operaciones
+        .limit(10)
         .onSnapshot((snapshot) => {
             if (snapshot.empty) {
-                tablaCloud.innerHTML = `<tr><td colspan="3" class="text-center text-muted py-3">No hay comandos en la nube.</td></tr>`;
+                // Ajustamos el colspan a 4 debido a la nueva columna
+                tablaCloud.innerHTML = `<tr><td colspan="4" class="text-center text-muted py-3">No hay comandos en la nube.</td></tr>`;
                 return;
             }
 
@@ -209,17 +209,17 @@ function escucharAccionesFirestore() {
                 const data = doc.data();
                 const fila = document.createElement("tr");
 
-                // Parseo e inyección de marca de tiempo (Timestamp to LocalString)
+                // Columna 1: Fecha
                 const celdaFecha = document.createElement("td");
                 const fechaObj = data.fecha ? data.fecha.toDate() : new Date();
                 celdaFecha.innerText = fechaObj.toLocaleString("es-MX", { timeZone: "America/Mexico_City" });
 
-                // Sanitización visual del string del operador
+                // Columna 2: Usuario
                 const celdaUsuario = document.createElement("td");
                 const nombreCorto = data.usuario ? data.usuario.split("@")[0] : "Desconocido";
                 celdaUsuario.innerHTML = `<span class="text-dark fw-medium"><i class="bi bi-person me-1"></i>${nombreCorto}</span>`;
 
-                // Renderizado dinámico de badges según el comando CRUD
+                // Columna 3: Comando (Badge)
                 const celdaAccion = document.createElement("td");
                 let badgeClass = "bg-secondary";
                 if (data.accion === "ON") badgeClass = "bg-success";
@@ -227,15 +227,39 @@ function escucharAccionesFirestore() {
                 if (data.accion === "AUTO") badgeClass = "bg-primary";
                 celdaAccion.innerHTML = `<span class="badge ${badgeClass} px-2.5 py-1.5 fw-bold shadow-sm">${data.accion}</span>`;
 
+                // Columna 4: NUEVA CELDA CON BOTÓN DE ELIMINAR (DELETE)
+                const celdaEliminar = document.createElement("td");
+                celdaEliminar.className = "text-center";
+                celdaEliminar.innerHTML = `
+                    <button class="btn btn-sm btn-outline-danger border-0 py-1 px-2" onclick="eliminarComandoCloud('${doc.id}')" title="Eliminar registro">
+                        <i class="bi bi-trash3-fill"></i>
+                    </button>
+                `;
+
                 fila.appendChild(celdaFecha);
                 fila.appendChild(celdaUsuario);
                 fila.appendChild(celdaAccion);
+                fila.appendChild(celdaEliminar);
                 tablaCloud.appendChild(fila);
             });
         }, (error) => {
             console.error("Fallo crítico en escucha reactiva Firestore:", error);
-            tablaCloud.innerHTML = `<tr><td colspan="3" class="text-center text-danger py-3">❌ Error de permisos o índice</td></tr>`;
+            tablaCloud.innerHTML = `<tr><td colspan="4" class="text-center text-danger py-3">❌ Error de permisos o índice</td></tr>`;
         });
+}
+
+// --- OPERACIÓN: DELETE ---
+function eliminarComandoCloud(docId) {
+    if (confirm("¿Estás seguro de que deseas eliminar este registro de auditoría en la nube?")) {
+        db.collection("historial_acciones").doc(docId).delete()
+            .then(() => {
+                console.log("✔ Registro eliminado de Firestore (Operación DELETE exitosa).");
+            })
+            .catch((error) => {
+                console.error("Error al intentar eliminar el documento de la nube:", error);
+                alert("No tienes permisos suficientes para borrar este registro.");
+            });
+    }
 }
 
 // =============================================================================

@@ -1,4 +1,13 @@
-// === CONFIGURACIÓN DEL SISTEMA ===
+// === 1. CONFIGURACIÓN DE PLATAFORMAS (IoT & CLOUD) ===
+const firebaseConfig = {
+    apiKey: "AIzaSyBTwlWjKWyJSEQZc4Os8XqH6OrugwLtBaI",
+    authDomain: "antartik-air.firebaseapp.com",
+    projectId: "antartik-air",
+    storageBucket: "antartik-air.firebasestorage.app",
+    messagingSenderId: "467017991469",
+    appId: "1:467017991469:web:607ec98b1b25e4db1b3fa4"
+};
+
 const THINGSPEAK_CHANNEL_ID = "3397586";
 const THINGSPEAK_READ_KEY   = "A0VIWKX95SC6X6XQ";
 
@@ -7,25 +16,77 @@ const MQTT_PORT     = 8084;
 const MQTT_PATH     = "/mqtt";
 const MQTT_CLIENT_ID = "web_client_" + Math.random().toString(16).substr(2, 8);
 
-// Tópicos
 const MQTT_TOPIC_CONTROL = "antartik/mcignacio00p2/ventilador/control";
 const MQTT_TOPIC_STATUS  = "antartik/mcignacio00p2/ventilador/status";
 
+// Inicializar instancias globales de Firebase
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db   = firebase.firestore();
+
 let mqttClient;
 
-// 1. INICIALIZACIÓN AL CARGAR LA PÁGINA
+// === 2. GESTIÓN DE SESIÓN Y LOGIN (FASE 5) ===
 document.addEventListener("DOMContentLoaded", () => {
-    conectarMQTT();
-    cargarHistorialThingSpeak();
+    
+    // Escuchar el estado de autenticación de forma reactiva
+    auth.onAuthStateChanged((user) => {
+        const loginContainer = document.getElementById("login-container");
+        const dashboardContainer = document.getElementById("dashboard-container");
+        const btnLogout = document.getElementById("btn-logout");
 
+        if (user) {
+            // Usuario autenticado exitosamente -> Mostrar Dashboard
+            loginContainer.classList.add("d-none");
+            dashboardContainer.classList.remove("d-none");
+            btnLogout.classList.remove("d-none");
+
+            // Arrancar conexiones asíncronas seguras
+            if (!mqttClient || !mqttClient.isConnected()) {
+                conectarMQTT();
+            }
+            cargarHistorialThingSpeak();
+        } else {
+            // Sin sesión activa -> Forzar vista de Login
+            loginContainer.classList.remove("d-none");
+            dashboardContainer.classList.add("d-none");
+            btnLogout.classList.add("d-none");
+
+            if (mqttClient && mqttClient.isConnected()) {
+                mqttClient.disconnect();
+            }
+        }
+    });
+
+    // Evento de Submit para el formulario de Login
+    document.getElementById("form-login").addEventListener("submit", (e) => {
+        e.preventDefault();
+        const email = document.getElementById("login-email").value;
+        const password = document.getElementById("login-password").value;
+        const errorDiv = document.getElementById("login-error");
+
+        auth.signInWithEmailAndPassword(email, password)
+            .then(() => {
+                errorDiv.classList.add("d-none");
+            })
+            .catch((error) => {
+                console.error("Fallo de autenticación:", error.message);
+                errorDiv.classList.remove("d-none");
+            });
+    });
+
+    // Evento para Cerrar Sesión
+    document.getElementById("btn-logout").addEventListener("click", () => {
+        auth.signOut();
+    });
+
+    // === CONFIGURACIÓN DE FILTROS E INTERFAZ EXISTENTE ===
     const selectFiltro = document.getElementById("select-filtro");
     const contenedorFechas = document.getElementById("contenedor-fechas");
 
     selectFiltro.addEventListener("change", () => {
         if (selectFiltro.value === "rango") {
             contenedorFechas.classList.remove("d-none");
-            
-            // CORRECCIÓN: Obtener la fecha de hoy en formato LOCAL (YYYY-MM-DD), no en UTC
             const ahora = new Date();
             const y = ahora.getFullYear();
             const m = String(ahora.getMonth() + 1).padStart(2, '0');
@@ -36,43 +97,38 @@ document.addEventListener("DOMContentLoaded", () => {
             document.getElementById("fecha-fin").value = hoyLocalStr;
         } else {
             contenedorFechas.classList.add("d-none");
-            cargarHistorialThingSpeak(); 
+            if(auth.currentUser) cargarHistorialThingSpeak(); 
         }
     });
 
     document.getElementById("btn-aplicar-filtro").addEventListener("click", cargarHistorialThingSpeak);
 
-    // Automatización: Refrescar cada 15 segundos sólo si se está viendo "Hoy"
     setInterval(() => {
-        if (selectFiltro.value === "hoy") {
-            console.log("Actualizando datos automáticos de hoy...");
+        if (selectFiltro.value === "hoy" && auth.currentUser) {
             cargarHistorialThingSpeak();
         }
     }, 15000);
 
-    // Configurar botones de control remoto
+    // Bindeo de botones de control remoto manual
     document.getElementById("btn-on").addEventListener("click", () => enviarComando("ON"));
     document.getElementById("btn-off").addEventListener("click", () => enviarComando("OFF"));
     document.getElementById("btn-auto").addEventListener("click", () => enviarComando("AUTO"));
-    
     document.getElementById("btn-refresh-db").addEventListener("click", cargarHistorialThingSpeak);
 });
 
-// 2. LÓGICA DE CONEXIÓN MQTT
+// === 3. CONEXIÓN Y LOGICA MQTT (TIEMPO REAL) ===
 function conectarMQTT() {
     const badge = document.getElementById("mqtt-status-badge");
-    
     mqttClient = new Paho.MQTT.Client(MQTT_BROKER, Number(MQTT_PORT), MQTT_PATH, MQTT_CLIENT_ID);
 
     mqttClient.onConnectionLost = (responseObject) => {
         console.log("Conexión MQTT perdida:", responseObject.errorMessage);
         badge.className = "badge bg-danger";
         badge.innerText = "Desconectado";
-        setTimeout(conectarMQTT, 5000);
+        if (auth.currentUser) setTimeout(conectarMQTT, 5000);
     };
 
     mqttClient.onMessageArrived = (message) => {
-        console.log("Mensaje MQTT recibido:", message.payloadString);
         if (message.destinationName === MQTT_TOPIC_STATUS) {
             procesarEstadoPico(message.payloadString);
         }
@@ -81,34 +137,45 @@ function conectarMQTT() {
     const opciones = {
         useSSL: true,
         onSuccess: () => {
-            console.log("✅ Conectado exitosamente al Broker MQTT");
             badge.className = "badge bg-success";
             badge.innerText = "Online (MQTT)";
             mqttClient.subscribe(MQTT_TOPIC_STATUS);
         },
         onFailure: (error) => {
-            console.log("❌ Fallo de conexión MQTT:", error.errorMessage);
             badge.className = "badge bg-warning text-dark";
             badge.innerText = "Error de Conexión";
-            setTimeout(conectarMQTT, 10000);
+            if (auth.currentUser) setTimeout(conectarMQTT, 10000);
         }
     };
-
     mqttClient.connect(opciones);
 }
 
-// 3. ENVIAR COMANDOS
+// === 4. FASE 4: OPERACIÓN CRUD (CREATE) ===
 function enviarComando(command) {
     if (!mqttClient || !mqttClient.isConnected()) {
         alert("No hay conexión con el servidor MQTT en este momento.");
         return;
     }
+    
+    // 1. Envío físico inmediato al hardware vía Broker MQTT
     const mensaje = new Paho.MQTT.Message(command);
     mensaje.destinationName = MQTT_TOPIC_CONTROL;
     mqttClient.send(mensaje);
+
+    // 2. Transacción en la Nube: Guardar la acción en Firestore (Operación Create)
+    const usuarioActual = auth.currentUser;
+    if (usuarioActual) {
+        db.collection("historial_acciones").add({
+            usuario: usuarioActual.email,
+            accion: command,
+            fecha: firebase.firestore.FieldValue.serverTimestamp()
+        })
+        .then(() => console.log("✔ Evento CRUD registrado en la nube de forma persistente."))
+        .catch(err => console.error("Error en persistencia cloud:", err));
+    }
 }
 
-// 4. PROCESAR ESTADO EN TIEMPO REAL
+// === 5. PROCESAMIENTO DE TELEMETRÍA Y PARSEO ===
 function procesarEstadoPico(payload) {
     const datos = payload.split("|");
     if (datos.length >= 3) {
@@ -138,14 +205,13 @@ function procesarEstadoPico(payload) {
     }
 }
 
-// 5. JALAR HISTORIAL CORREGIDO (Manejo preciso de Zonas Horarias)
+// === 6. JALAR HISTORIAL DESDE LA NUBE (THINGSPEAK API) ===
 async function cargarHistorialThingSpeak() {
     const tabla = document.getElementById("tabla-historial");
     const filtro = document.getElementById("select-filtro").value;
     
     let url = `https://api.thingspeak.com/channels/${THINGSPEAK_CHANNEL_ID}/feeds.json?api_key=${THINGSPEAK_READ_KEY}`;
 
-    // Helper para formatear cualquier objeto Date a la cadena UTC exacta que ThingSpeak requiere
     const dateToUTCString = (dateObj) => {
         const y = dateObj.getUTCFullYear();
         const m = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
@@ -157,39 +223,24 @@ async function cargarHistorialThingSpeak() {
     };
 
     if (filtro === "hoy") {
-        const start = new Date();
-        start.setHours(0, 0, 0, 0); // Desde las 00:00:00 locales de hoy
-        const end = new Date();
-        end.setHours(23, 59, 59, 999); // Hasta las 23:59:59 locales de hoy
-        
+        const start = new Date(); start.setHours(0, 0, 0, 0);
+        const end = new Date(); end.setHours(23, 59, 59, 999);
         url += `&start=${dateToUTCString(start)}&end=${dateToUTCString(end)}&results=8000`;
     } 
     else if (filtro === "ayer") {
-        const start = new Date();
-        start.setDate(start.getDate() - 1);
-        start.setHours(0, 0, 0, 0); // 00:00:00 local de ayer
-        
-        const end = new Date();
-        end.setDate(end.getDate() - 1);
-        end.setHours(23, 59, 59, 999); // 23:59:59 local de ayer
-        
+        const start = new Date(); start.setDate(start.getDate() - 1); start.setHours(0, 0, 0, 0);
+        const end = new Date(); end.setDate(end.getDate() - 1); end.setHours(23, 59, 59, 999);
         url += `&start=${dateToUTCString(start)}&end=${dateToUTCString(end)}&results=8000`;
     } 
     else if (filtro === "rango") {
         const fechaInicioVal = document.getElementById("fecha-inicio").value;
         const fechaFinVal = document.getElementById("fecha-fin").value;
-        
-        if (!fechaInicioVal || !fechaFinVal) {
-            alert("Por favor, selecciona un rango válido.");
-            return;
-        }
+        if (!fechaInicioVal || !fechaFinVal) return;
 
         const pInicio = fechaInicioVal.split("-");
         const start = new Date(pInicio[0], pInicio[1] - 1, pInicio[2], 0, 0, 0);
-
         const pFin = fechaFinVal.split("-");
         const end = new Date(pFin[0], pFin[1] - 1, pFin[2], 23, 59, 59);
-
         url += `&start=${dateToUTCString(start)}&end=${dateToUTCString(end)}&results=8000`;
     }
 
@@ -203,13 +254,11 @@ async function cargarHistorialThingSpeak() {
             return;
         }
 
-        const ultimoRegistro = registros[0];
-        document.getElementById("txt-cloud-sync").innerText = `Último envío: ${formatearFecha(ultimoRegistro.created_at)}`;
-
+        document.getElementById("txt-cloud-sync").innerText = `Último envío: ${formatearFecha(registros[0].created_at)}`;
         tabla.innerHTML = "";
+        
         registros.forEach(reg => {
             const fila = document.createElement("tr");
-            
             const celdaFecha = document.createElement("td");
             celdaFecha.innerText = formatearFecha(reg.created_at);
             
@@ -228,7 +277,6 @@ async function cargarHistorialThingSpeak() {
             fila.appendChild(celdaPir);
             tabla.appendChild(fila);
         });
-
     } catch (error) {
         console.error("Error consultando ThingSpeak:", error);
         tabla.innerHTML = `<tr><td colspan="3" class="text-center text-danger py-4">❌ Error al conectar con ThingSpeak API</td></tr>`;

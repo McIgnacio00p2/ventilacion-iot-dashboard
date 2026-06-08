@@ -1,4 +1,3 @@
-// === 1. CONFIGURACIÓN DE PLATAFORMAS (IoT & CLOUD) ===
 const firebaseConfig = {
     apiKey: "AIzaSyBTwlWjKWyJSEQZc4Os8XqH6OrugwLtBaI",
     authDomain: "antartik-air.firebaseapp.com",
@@ -7,47 +6,52 @@ const firebaseConfig = {
     messagingSenderId: "467017991469",
     appId: "1:467017991469:web:607ec98b1b25e4db1b3fa4"
 };
-
+// Parametrización de ThingSpeak IoT API
 const THINGSPEAK_CHANNEL_ID = "3397586";
 const THINGSPEAK_READ_KEY   = "A0VIWKX95SC6X6XQ";
 
+// Configuración del Broker MQTT mediante WebSockets Seguros
 const MQTT_BROKER   = "broker.emqx.io";
 const MQTT_PORT     = 8084;
 const MQTT_PATH     = "/mqtt";
 const MQTT_CLIENT_ID = "web_client_" + Math.random().toString(16).substr(2, 8);
 
+// Tópicos de comunicación remota con la Raspberry Pi Pico W
 const MQTT_TOPIC_CONTROL = "antartik/mcignacio00p2/ventilador/control";
 const MQTT_TOPIC_STATUS  = "antartik/mcignacio00p2/ventilador/status";
 
-// Inicializar instancias globales de Firebase
+// Inicialización de las instancias de Firebase (Arquitectura Serverless)
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db   = firebase.firestore();
 
 let mqttClient;
 
-// === 2. GESTIÓN DE SESIÓN Y LOGIN (FASE 5) ===
+// =============================================================================
+// 2. CICLO DE VIDA DE LA APP Y MANEJO DE SESIONES (FASE 5: SEGURIDAD)
+// =============================================================================
+
 document.addEventListener("DOMContentLoaded", () => {
     
-    // Escuchar el estado de autenticación de forma reactiva
+    // Listener reactivo al estado de autenticación del usuario
     auth.onAuthStateChanged((user) => {
         const loginContainer = document.getElementById("login-container");
         const dashboardContainer = document.getElementById("dashboard-container");
         const btnLogout = document.getElementById("btn-logout");
 
         if (user) {
-            // Usuario autenticado exitosamente -> Mostrar Dashboard
+            // Usuario validado -> Transición visual y apertura de sockets
             loginContainer.classList.add("d-none");
             dashboardContainer.classList.remove("d-none");
             btnLogout.classList.remove("d-none");
 
-            // Arrancar conexiones asíncronas seguras
             if (!mqttClient || !mqttClient.isConnected()) {
                 conectarMQTT();
             }
             cargarHistorialThingSpeak();
+            escucharAccionesFirestore(); // Iniciar stream en tiempo real de auditoría
         } else {
-            // Sin sesión activa -> Forzar vista de Login
+            // Usuario desautenticado -> Bloqueo preventivo de la interfaz
             loginContainer.classList.remove("d-none");
             dashboardContainer.classList.add("d-none");
             btnLogout.classList.add("d-none");
@@ -58,7 +62,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // Evento de Submit para el formulario de Login
+    // Evento de inicio de sesión manual (Firebase Auth)
     document.getElementById("form-login").addEventListener("submit", (e) => {
         e.preventDefault();
         const email = document.getElementById("login-email").value;
@@ -70,17 +74,19 @@ document.addEventListener("DOMContentLoaded", () => {
                 errorDiv.classList.add("d-none");
             })
             .catch((error) => {
-                console.error("Fallo de autenticación:", error.message);
+                console.error("Error de acceso:", error.message);
                 errorDiv.classList.remove("d-none");
             });
     });
 
-    // Evento para Cerrar Sesión
+    // Evento para cierre definitivo de sesión
     document.getElementById("btn-logout").addEventListener("click", () => {
         auth.signOut();
     });
 
-    // === CONFIGURACIÓN DE FILTROS E INTERFAZ EXISTENTE ===
+    // =============================================================================
+    // LÓGICA DE FILTROS E INTERFAZ DEL DASHBOARD
+    // =============================================================================
     const selectFiltro = document.getElementById("select-filtro");
     const contenedorFechas = document.getElementById("contenedor-fechas");
 
@@ -97,32 +103,36 @@ document.addEventListener("DOMContentLoaded", () => {
             document.getElementById("fecha-fin").value = hoyLocalStr;
         } else {
             contenedorFechas.classList.add("d-none");
-            if(auth.currentUser) cargarHistorialThingSpeak(); 
+            if (auth.currentUser) cargarHistorialThingSpeak(); 
         }
     });
 
     document.getElementById("btn-aplicar-filtro").addEventListener("click", cargarHistorialThingSpeak);
 
+    // Automatización de refresco de telemetría cada 15 segundos
     setInterval(() => {
         if (selectFiltro.value === "hoy" && auth.currentUser) {
             cargarHistorialThingSpeak();
         }
     }, 15000);
 
-    // Bindeo de botones de control remoto manual
+    // Mapeo de clics a la lógica CRUD y MQTT
     document.getElementById("btn-on").addEventListener("click", () => enviarComando("ON"));
     document.getElementById("btn-off").addEventListener("click", () => enviarComando("OFF"));
     document.getElementById("btn-auto").addEventListener("click", () => enviarComando("AUTO"));
     document.getElementById("btn-refresh-db").addEventListener("click", cargarHistorialThingSpeak);
 });
 
-// === 3. CONEXIÓN Y LOGICA MQTT (TIEMPO REAL) ===
+// =============================================================================
+// 3. COMUNICACIÓN MQTT (TELEMETRÍA EN TIEMPO REAL)
+// =============================================================================
+
 function conectarMQTT() {
     const badge = document.getElementById("mqtt-status-badge");
     mqttClient = new Paho.MQTT.Client(MQTT_BROKER, Number(MQTT_PORT), MQTT_PATH, MQTT_CLIENT_ID);
 
     mqttClient.onConnectionLost = (responseObject) => {
-        console.log("Conexión MQTT perdida:", responseObject.errorMessage);
+        console.warn("Conexión MQTT interrumpida:", responseObject.errorMessage);
         badge.className = "badge bg-danger";
         badge.innerText = "Desconectado";
         if (auth.currentUser) setTimeout(conectarMQTT, 5000);
@@ -150,19 +160,23 @@ function conectarMQTT() {
     mqttClient.connect(opciones);
 }
 
-// === 4. FASE 4: OPERACIÓN CRUD (CREATE) ===
+// =============================================================================
+// 4. FASE 4: OPERACIONES CRUD EN LA NUBE (CREATE & READ)
+// =============================================================================
+
+// --- OPERACIÓN: CREATE (Escritura en Firestore) ---
 function enviarComando(command) {
     if (!mqttClient || !mqttClient.isConnected()) {
-        alert("No hay conexión con el servidor MQTT en este momento.");
+        alert("Sin conexión establecida con el Broker MQTT.");
         return;
     }
     
-    // 1. Envío físico inmediato al hardware vía Broker MQTT
+    // 1. Envío físico del payload a la Raspberry Pi por protocolo MQTT
     const mensaje = new Paho.MQTT.Message(command);
     mensaje.destinationName = MQTT_TOPIC_CONTROL;
     mqttClient.send(mensaje);
 
-    // 2. Transacción en la Nube: Guardar la acción en Firestore (Operación Create)
+    // 2. Persistencia en la nube: Guardar acción estructurada con el usuario actual
     const usuarioActual = auth.currentUser;
     if (usuarioActual) {
         db.collection("historial_acciones").add({
@@ -170,12 +184,64 @@ function enviarComando(command) {
             accion: command,
             fecha: firebase.firestore.FieldValue.serverTimestamp()
         })
-        .then(() => console.log("✔ Evento CRUD registrado en la nube de forma persistente."))
-        .catch(err => console.error("Error en persistencia cloud:", err));
+        .then(() => console.log("✔ Evento registrado en Firestore (Operación CREATE exitosa)."))
+        .catch(err => console.error("Error de persistencia cloud:", err));
     }
 }
 
-// === 5. PROCESAMIENTO DE TELEMETRÍA Y PARSEO ===
+// --- OPERACIÓN: READ (Escucha activa / Stream en tiempo real) ---
+function escucharAccionesFirestore() {
+    const tablaCloud = document.getElementById("tabla-acciones-cloud");
+    if (!tablaCloud) return;
+
+    // Conexión por Websocket nativo a Firestore ordenando de forma descendente
+    db.collection("historial_acciones")
+        .orderBy("fecha", "desc")
+        .limit(10) // Restricción para traer solo las últimas 10 operaciones
+        .onSnapshot((snapshot) => {
+            if (snapshot.empty) {
+                tablaCloud.innerHTML = `<tr><td colspan="3" class="text-center text-muted py-3">No hay comandos en la nube.</td></tr>`;
+                return;
+            }
+
+            tablaCloud.innerHTML = "";
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                const fila = document.createElement("tr");
+
+                // Parseo e inyección de marca de tiempo (Timestamp to LocalString)
+                const celdaFecha = document.createElement("td");
+                const fechaObj = data.fecha ? data.fecha.toDate() : new Date();
+                celdaFecha.innerText = fechaObj.toLocaleString("es-MX", { timeZone: "America/Mexico_City" });
+
+                // Sanitización visual del string del operador
+                const celdaUsuario = document.createElement("td");
+                const nombreCorto = data.usuario ? data.usuario.split("@")[0] : "Desconocido";
+                celdaUsuario.innerHTML = `<span class="text-dark fw-medium"><i class="bi bi-person me-1"></i>${nombreCorto}</span>`;
+
+                // Renderizado dinámico de badges según el comando CRUD
+                const celdaAccion = document.createElement("td");
+                let badgeClass = "bg-secondary";
+                if (data.accion === "ON") badgeClass = "bg-success";
+                if (data.accion === "OFF") badgeClass = "bg-danger";
+                if (data.accion === "AUTO") badgeClass = "bg-primary";
+                celdaAccion.innerHTML = `<span class="badge ${badgeClass} px-2.5 py-1.5 fw-bold shadow-sm">${data.accion}</span>`;
+
+                fila.appendChild(celdaFecha);
+                fila.appendChild(celdaUsuario);
+                fila.appendChild(celdaAccion);
+                tablaCloud.appendChild(fila);
+            });
+        }, (error) => {
+            console.error("Fallo crítico en escucha reactiva Firestore:", error);
+            tablaCloud.innerHTML = `<tr><td colspan="3" class="text-center text-danger py-3">❌ Error de permisos o índice</td></tr>`;
+        });
+}
+
+// =============================================================================
+// 5. PARSEO DE PROTOCOLO E HISTORIAL DE SENSORES (THINGSPEAK)
+// =============================================================================
+
 function procesarEstadoPico(payload) {
     const datos = payload.split("|");
     if (datos.length >= 3) {
@@ -205,7 +271,6 @@ function procesarEstadoPico(payload) {
     }
 }
 
-// === 6. JALAR HISTORIAL DESDE LA NUBE (THINGSPEAK API) ===
 async function cargarHistorialThingSpeak() {
     const tabla = document.getElementById("tabla-historial");
     const filtro = document.getElementById("select-filtro").value;
@@ -278,7 +343,7 @@ async function cargarHistorialThingSpeak() {
             tabla.appendChild(fila);
         });
     } catch (error) {
-        console.error("Error consultando ThingSpeak:", error);
+        console.error("Fallo consultando ThingSpeak API:", error);
         tabla.innerHTML = `<tr><td colspan="3" class="text-center text-danger py-4">❌ Error al conectar con ThingSpeak API</td></tr>`;
     }
 }

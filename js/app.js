@@ -1,3 +1,4 @@
+// === 1. CONFIGURACIÓN E INICIALIZACIÓN DE PLATAFORMAS CLOUD ===
 const firebaseConfig = {
     apiKey: "AIzaSyBTwlWjKWyJSEQZc4Os8XqH6OrugwLtBaI",
     authDomain: "antartik-air.firebaseapp.com",
@@ -6,21 +7,19 @@ const firebaseConfig = {
     messagingSenderId: "467017991469",
     appId: "1:467017991469:web:607ec98b1b25e4db1b3fa4"
 };
-// Parametrización de ThingSpeak IoT API
+
 const THINGSPEAK_CHANNEL_ID = "3397586";
 const THINGSPEAK_READ_KEY   = "A0VIWKX95SC6X6XQ";
 
-// Configuración del Broker MQTT mediante WebSockets Seguros
 const MQTT_BROKER   = "broker.emqx.io";
 const MQTT_PORT     = 8084;
 const MQTT_PATH     = "/mqtt";
 const MQTT_CLIENT_ID = "web_client_" + Math.random().toString(16).substr(2, 8);
 
-// Tópicos de comunicación remota con la Raspberry Pi Pico W
 const MQTT_TOPIC_CONTROL = "antartik/mcignacio00p2/ventilador/control";
 const MQTT_TOPIC_STATUS  = "antartik/mcignacio00p2/ventilador/status";
 
-// Inicialización de las instancias de Firebase (Arquitectura Serverless)
+// Inicialización de Firebase
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db   = firebase.firestore();
@@ -28,9 +27,8 @@ const db   = firebase.firestore();
 let mqttClient;
 
 // =============================================================================
-// 2. CICLO DE VIDA DE LA APP Y MANEJO DE SESIONES (FASE 5: SEGURIDAD)
+// 2. CICLO DE VIDA DE LA APP Y MANEJO DE SESIONES (SEGURIDAD FIREBASE)
 // =============================================================================
-
 document.addEventListener("DOMContentLoaded", () => {
     
     // Listener reactivo al estado de autenticación del usuario
@@ -40,7 +38,6 @@ document.addEventListener("DOMContentLoaded", () => {
         const btnLogout = document.getElementById("btn-logout");
 
         if (user) {
-            // Usuario validado -> Transición visual y apertura de sockets
             loginContainer.classList.add("d-none");
             dashboardContainer.classList.remove("d-none");
             btnLogout.classList.remove("d-none");
@@ -49,9 +46,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 conectarMQTT();
             }
             cargarHistorialThingSpeak();
-            escucharAccionesFirestore(); // Iniciar stream en tiempo real de auditoría
+            escucharAccionesFirestore(); 
         } else {
-            // Usuario desautenticado -> Bloqueo preventivo de la interfaz
             loginContainer.classList.remove("d-none");
             dashboardContainer.classList.add("d-none");
             btnLogout.classList.add("d-none");
@@ -79,14 +75,12 @@ document.addEventListener("DOMContentLoaded", () => {
             });
     });
 
-    // Evento para cierre definitivo de sesión
+    // Evento para cierre de sesión
     document.getElementById("btn-logout").addEventListener("click", () => {
         auth.signOut();
     });
 
-    // =============================================================================
-    // LÓGICA DE FILTROS E INTERFAZ DEL DASHBOARD
-    // =============================================================================
+    // Controladores de filtros para ThingSpeak
     const selectFiltro = document.getElementById("select-filtro");
     const contenedorFechas = document.getElementById("contenedor-fechas");
 
@@ -109,14 +103,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
     document.getElementById("btn-aplicar-filtro").addEventListener("click", cargarHistorialThingSpeak);
 
-    // Automatización de refresco de telemetria cada 15 segundos
+    // Automatización de refresco de telemetria cada 15 segundos (Modo Seguro Seguro)
     setInterval(() => {
         if (selectFiltro.value === "hoy" && auth.currentUser) {
             cargarHistorialThingSpeak();
         }
     }, 15000);
 
-    // Mapeo de clics a la lógica CRUD y MQTT
+    // Mapeo de botones a comandos MQTT
     document.getElementById("btn-on").addEventListener("click", () => enviarComando("ON"));
     document.getElementById("btn-off").addEventListener("click", () => enviarComando("OFF"));
     document.getElementById("btn-auto").addEventListener("click", () => enviarComando("AUTO"));
@@ -126,7 +120,6 @@ document.addEventListener("DOMContentLoaded", () => {
 // =============================================================================
 // 3. COMUNICACIÓN MQTT (TELEMETRÍA EN TIEMPO REAL)
 // =============================================================================
-
 function conectarMQTT() {
     const badge = document.getElementById("mqtt-status-badge");
     mqttClient = new Paho.MQTT.Client(MQTT_BROKER, Number(MQTT_PORT), MQTT_PATH, MQTT_CLIENT_ID);
@@ -161,22 +154,20 @@ function conectarMQTT() {
 }
 
 // =============================================================================
-// 4. FASE 4: OPERACIONES CRUD EN LA NUBE (CREATE & READ)
+// 4. OPERACIONES CRUD EN LA NUBE (FIRESTORE AUDIT LOGS)
 // =============================================================================
 
-// --- OPERACIÓN: CREATE (Escritura en Firestore) ---
+// --- OPERACIÓN: CREATE (Escritura en Firestore con el usuario validado) ---
 function enviarComando(command) {
     if (!mqttClient || !mqttClient.isConnected()) {
         alert("Sin conexión establecida con el Broker MQTT.");
         return;
     }
     
-    // 1. Envío físico del payload a la Raspberry Pi por protocolo MQTT
     const mensaje = new Paho.MQTT.Message(command);
     mensaje.destinationName = MQTT_TOPIC_CONTROL;
     mqttClient.send(mensaje);
 
-    // 2. Persistencia en la nube: Guardar acción estructurada con el usuario actual
     const usuarioActual = auth.currentUser;
     if (usuarioActual) {
         db.collection("historial_acciones").add({
@@ -184,12 +175,12 @@ function enviarComando(command) {
             accion: command,
             fecha: firebase.firestore.FieldValue.serverTimestamp()
         })
-        .then(() => console.log("✔ Evento registrado en Firestore (Operación CREATE exitosa)."))
+        .then(() => console.log("✔ Evento registrado en Firestore."))
         .catch(err => console.error("Error de persistencia cloud:", err));
     }
 }
 
-// --- OPERACIÓN: READ ---
+// --- OPERACIÓN: READ (Escucha reactiva en tiempo real) ---
 function escucharAccionesFirestore() {
     const tablaCloud = document.getElementById("tabla-acciones-cloud");
     if (!tablaCloud) return;
@@ -199,7 +190,6 @@ function escucharAccionesFirestore() {
         .limit(10)
         .onSnapshot((snapshot) => {
             if (snapshot.empty) {
-                // Ajustamos el colspan a 4 debido a la nueva columna
                 tablaCloud.innerHTML = `<tr><td colspan="4" class="text-center text-muted py-3">No hay comandos en la nube.</td></tr>`;
                 return;
             }
@@ -209,17 +199,14 @@ function escucharAccionesFirestore() {
                 const data = doc.data();
                 const fila = document.createElement("tr");
 
-                // Columna 1: Fecha
                 const celdaFecha = document.createElement("td");
                 const fechaObj = data.fecha ? data.fecha.toDate() : new Date();
                 celdaFecha.innerText = fechaObj.toLocaleString("es-MX", { timeZone: "America/Mexico_City" });
 
-                // Columna 2: Usuario
                 const celdaUsuario = document.createElement("td");
                 const nombreCorto = data.usuario ? data.usuario.split("@")[0] : "Desconocido";
                 celdaUsuario.innerHTML = `<span class="text-dark fw-medium"><i class="bi bi-person me-1"></i>${nombreCorto}</span>`;
 
-                // Columna 3: Comando (Badge)
                 const celdaAccion = document.createElement("td");
                 let badgeClass = "bg-secondary";
                 if (data.accion === "ON") badgeClass = "bg-success";
@@ -227,7 +214,6 @@ function escucharAccionesFirestore() {
                 if (data.accion === "AUTO") badgeClass = "bg-primary";
                 celdaAccion.innerHTML = `<span class="badge ${badgeClass} px-2.5 py-1.5 fw-bold shadow-sm">${data.accion}</span>`;
 
-                // Columna 4: NUEVA CELDA CON BOTÓN DE ELIMINAR (DELETE)
                 const celdaEliminar = document.createElement("td");
                 celdaEliminar.className = "text-center";
                 celdaEliminar.innerHTML = `
@@ -248,13 +234,11 @@ function escucharAccionesFirestore() {
         });
 }
 
-// --- OPERACIÓN: DELETE ---
+// --- OPERACIÓN: DELETE (Borrado físico de un documento) ---
 function eliminarComandoCloud(docId) {
     if (confirm("¿Estás seguro de que deseas eliminar este registro de auditoría en la nube?")) {
         db.collection("historial_acciones").doc(docId).delete()
-            .then(() => {
-                console.log("✔ Registro eliminado de Firestore (Operación DELETE exitosa).");
-            })
+            .then(() => console.log("✔ Registro eliminado de Firestore."))
             .catch((error) => {
                 console.error("Error al intentar eliminar el documento de la nube:", error);
                 alert("No tienes permisos suficientes para borrar este registro.");
@@ -265,7 +249,6 @@ function eliminarComandoCloud(docId) {
 // =============================================================================
 // 5. PARSEO DE PROTOCOLO E HISTORIAL DE SENSORES (THINGSPEAK)
 // =============================================================================
-
 function procesarEstadoPico(payload) {
     const datos = payload.split("|");
     if (datos.length >= 3) {
@@ -343,9 +326,13 @@ async function cargarHistorialThingSpeak() {
             return;
         }
 
-        document.getElementById("txt-cloud-sync").innerText = `Último envío: ${formatearFecha(registros[0].created_at)}`;
-        tabla.innerHTML = "";
+        // CONTROL EXTRA DE SEGURIDAD: Modificamos sólo si la tarjeta existe en el DOM
+        const txtCloudSync = document.getElementById("txt-cloud-sync");
+        if (txtCloudSync) {
+            txtCloudSync.innerText = `Último envío: ${formatearFecha(registros[0].created_at)}`;
+        }
         
+        tabla.innerHTML = "";
         registros.forEach(reg => {
             const fila = document.createElement("tr");
             const celdaFecha = document.createElement("td");
